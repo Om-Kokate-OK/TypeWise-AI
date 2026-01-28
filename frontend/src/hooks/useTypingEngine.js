@@ -5,10 +5,13 @@ export function useTypingEngine(targetText) {
   const [started, setStarted] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
 
-  // NEW METRICS
+  // Phase 1 metrics
   const [backspaceCount, setBackspaceCount] = useState(0);
   const [totalKeystrokes, setTotalKeystrokes] = useState(0);
   const [wrongKeystrokes, setWrongKeystrokes] = useState(0);
+
+  // 🔥 Phase 2 raw keystroke events (MISSING EARLIER)
+  const [keystrokeEvents, setKeystrokeEvents] = useState([]);
 
   const handleKeyPress = (value) => {
     if (isCompleted) return;
@@ -17,15 +20,26 @@ export function useTypingEngine(targetText) {
       setStarted(true);
     }
 
-    // Detect backspace
+    // ⌫ BACKSPACE
     if (value.length < input.length) {
       setBackspaceCount((b) => b + 1);
       setTotalKeystrokes((t) => t + 1);
+
+      // record backspace event
+      setKeystrokeEvents((events) => [
+        ...events,
+        { type: "backspace",
+          timestamp: Date.now()
+
+         }
+
+      ]);
+
       setInput(value);
       return;
     }
 
-    // Hard cap to target length
+    // Hard cap
     if (value.length > targetText.length) return;
 
     const index = value.length - 1;
@@ -34,9 +48,24 @@ export function useTypingEngine(targetText) {
 
     setTotalKeystrokes((t) => t + 1);
 
-    if (typedChar !== expectedChar) {
+    const isCorrect = typedChar === expectedChar;
+
+    if (!isCorrect) {
       setWrongKeystrokes((w) => w + 1);
     }
+
+    // 🔑 record key event
+    setKeystrokeEvents((events) => [
+      ...events,
+      {
+        type: "key",
+        typedChar,
+        expectedChar,
+        correct: isCorrect,
+        timestamp: Date.now()
+
+      }
+    ]);
 
     setInput(value);
 
@@ -45,7 +74,7 @@ export function useTypingEngine(targetText) {
     }
   };
 
-  // DERIVED FINAL CORRECTNESS (NET)
+  // Net correctness (final input only)
   let correctFinalChars = 0;
   const compareLength = Math.min(input.length, targetText.length);
 
@@ -62,6 +91,7 @@ export function useTypingEngine(targetText) {
     setBackspaceCount(0);
     setTotalKeystrokes(0);
     setWrongKeystrokes(0);
+    setKeystrokeEvents([]);
   };
 
   return {
@@ -69,11 +99,14 @@ export function useTypingEngine(targetText) {
     started,
     isCompleted,
 
-    // metrics
+    // Phase 1 metrics
     correctFinalChars,
     wrongKeystrokes,
     backspaceCount,
     totalKeystrokes,
+
+    // Phase 2 analytics stream
+    keystrokeEvents,
 
     handleKeyPress,
     resetEngine
