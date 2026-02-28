@@ -9,6 +9,7 @@ import { analyzeBackspaceBehavior } from "../analytics/backspaceAnalytics";
 import { analyzeSpeedStability } from "../analytics/speedAnalytics";
 import KeyboardHeatmap from "../components/KeyboardHeatmap";
 import { useState } from "react";
+import { generateAdaptiveText } from "../ai/adaptiveEngine";
 
 
 import {
@@ -20,8 +21,12 @@ import { analyzeKeyAccuracy } from "../analytics/keyAnalytics";
 import { rankWeakKeys } from "../analytics/weakKeyAnalyzer";
 
 export default function Dashboard() {
-  const text = useMemo(() => getRandomText(), []);
+  const [text, setText] = useState(getRandomText());
+  const [performance, setPerformance] = useState(null);
   const typing = useTypingEngine(text);
+
+  const [mode, setMode] = useState("words");
+const [wordLimit, setWordLimit] = useState(40);
 
   const timer = useSessionTimer(typing.started && !typing.isCompleted);
 
@@ -44,51 +49,60 @@ export default function Dashboard() {
 
   const [keyStatsState, setKeyStatsState] = useState({});
 
-  // ✅ PHASE 2 ANALYTICS (FIXED)
+
 // useEffect(() => {
 //   if (!typing.isCompleted) return;
 
 //   const keyStats = analyzeKeyAccuracy(
 //     typing.keystrokeEvents
 //   );
-//   const weakKeys = rankWeakKeys(keyStats);
 
+//   setKeyStatsState(keyStats);
+
+//   const weakKeys = rankWeakKeys(keyStats);
 //   const backspaceStats = analyzeBackspaceBehavior(
 //     typing.keystrokeEvents
 //   );
-
 //   const speedStats = analyzeSpeedStability(
 //     typing.keystrokeEvents
 //   );
 
-//   console.log("Key Stats:", keyStats);
-//   console.log("Weak Keys:", weakKeys);
-//   console.log("Backspace Stats:", backspaceStats);
-//   console.log("Speed Stats:", speedStats);
+//   // console.log("Key Stats:", keyStats);
+//   // console.log("Weak Keys:", weakKeys);
+//   // console.log("Backspace Stats:", backspaceStats);
+//   // console.log("Speed Stats:", speedStats);
+
+//   const performanceSummary = {
+//   stabilityScore: speedStats.stabilityScore,
+//   wpm,
+//   correctionRatio: backspaceStats.correctionRatio
+// };
+// setPerformance(performanceSummary);
 // }, [typing.isCompleted, typing.keystrokeEvents]);
 
 useEffect(() => {
   if (!typing.isCompleted) return;
 
-  const keyStats = analyzeKeyAccuracy(
-    typing.keystrokeEvents
-  );
-
+  const keyStats = analyzeKeyAccuracy(typing.keystrokeEvents);
   setKeyStatsState(keyStats);
 
-  const weakKeys = rankWeakKeys(keyStats);
-  const backspaceStats = analyzeBackspaceBehavior(
-    typing.keystrokeEvents
-  );
-  const speedStats = analyzeSpeedStability(
-    typing.keystrokeEvents
-  );
+  const weakKeys = rankWeakKeys(keyStats).map((k) => k.key);
 
-  console.log("Key Stats:", keyStats);
+  const backspaceStats = analyzeBackspaceBehavior(typing.keystrokeEvents);
+  const speedStats = analyzeSpeedStability(typing.keystrokeEvents);
+
+  const performanceSummary = {
+    stabilityScore: speedStats.stabilityScore,
+    wpm,
+    correctionRatio: backspaceStats.correctionRatio,
+  };
+
+  setPerformance(performanceSummary);
+
   console.log("Weak Keys:", weakKeys);
-  console.log("Backspace Stats:", backspaceStats);
-  console.log("Speed Stats:", speedStats);
-}, [typing.isCompleted, typing.keystrokeEvents]);
+  console.log("Performance:", performanceSummary);
+}, [typing.isCompleted]);
+
 
   return (
     <div
@@ -105,6 +119,28 @@ useEffect(() => {
       <p style={{ marginBottom: "20px", color: "#64748b" }}>
         Typing Skill Analyzer - Phase 3 (HeatMap)
       </p>
+      <div style={{ marginBottom: "20px", textAlign: "center" }}>
+  {[25, 40, 50].map((count) => (
+    <button
+      key={count}
+      onClick={() => {
+        setWordLimit(count);
+        setText(generateAdaptiveText(performance, [], count));
+        typing.resetEngine();
+      }}
+      style={{
+        margin: "0 5px",
+        padding: "6px 12px",
+        borderRadius: "6px",
+        border: wordLimit === count ? "2px solid #2563eb" : "1px solid #ccc",
+        background: "white",
+        cursor: "pointer"
+      }}
+    >
+      {count} Words
+    </button>
+  ))}
+</div>
 
       <TypingBox
         text={text}
@@ -134,6 +170,32 @@ useEffect(() => {
         backspaces={typing.backspaceCount}
         wrongKeys={typing.wrongKeystrokes}
       />
+
+      {typing.isCompleted && performance && (
+  <button
+    onClick={() => {
+      const keyStats = analyzeKeyAccuracy(typing.keystrokeEvents);
+      const weakKeys = rankWeakKeys(keyStats).map((k) => k.key);
+
+      const newText = generateAdaptiveText(performance, weakKeys, wordLimit);
+
+      setText(newText);
+      typing.resetEngine();
+    }}
+    style={{
+      marginTop: "20px",
+      padding: "10px 20px",
+      borderRadius: "6px",
+      border: "none",
+      background: "#2563eb",
+      color: "white",
+      cursor: "pointer"
+    }}
+  >
+    Start Adaptive Test
+  </button>
+)}
+
     </div>
   );
 }
