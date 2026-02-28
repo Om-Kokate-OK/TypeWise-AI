@@ -1,18 +1,20 @@
+import TargetTextDisplay from "./TargetTextDisplay";
+
 export default function TypingBox({ text, value, onChange }) {
   return (
     <div style={{ marginBottom: "20px" }}>
-      {/* Target Text */}
+      
+      {/* Target Text with Live Highlight */}
       <div
         style={{
           background: "#f8fafc",
           padding: "14px",
           borderRadius: "8px",
-          fontSize: "18px",
           marginBottom: "12px",
           border: "1px solid #e2e8f0"
         }}
       >
-        {text}
+        <TargetTextDisplay text={text} input={value} />
       </div>
 
       {/* Typing Area */}

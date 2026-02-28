@@ -103,7 +103,7 @@ useEffect(() => {
     >
       <h2 style={{ marginBottom: "6px" }}>TypeWise AI</h2>
       <p style={{ marginBottom: "20px", color: "#64748b" }}>
-        Typing Skill Analyzer – Phase 2 (Analytics)
+        Typing Skill Analyzer - Phase 3 (HeatMap)
       </p>
 
       <TypingBox
