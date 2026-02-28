@@ -4,7 +4,20 @@ const keyboardRows = [
   ["z","x","c","v","b","n","m"]
 ];
 
-export default function KeyboardHeatmap() {
+function getHeatColor(wrongCount) {
+  if (!wrongCount) return "#e5e7eb"; // neutral grey
+
+  // Clamp intensity between 1 and 5
+  const intensity = Math.min(wrongCount, 5);
+
+  // Red scale: darker with more mistakes
+  const redValue = 255;
+  const greenBlue = 255 - intensity * 35;
+
+  return `rgb(${redValue}, ${greenBlue}, ${greenBlue})`;
+}
+
+export default function KeyboardHeatmap({ keyStats }) {
   return (
     <div style={{ marginTop: "30px" }}>
       <h3 style={{ marginBottom: "15px" }}>Keyboard Heatmap</h3>
@@ -18,25 +31,30 @@ export default function KeyboardHeatmap() {
             marginBottom: "8px"
           }}
         >
-          {row.map((key) => (
-            <div
-              key={key}
-              style={{
-                width: "40px",
-                height: "40px",
-                margin: "4px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: "6px",
-                background: "#e5e7eb",
-                fontWeight: "600",
-                textTransform: "uppercase"
-              }}
-            >
-              {key}
-            </div>
-          ))}
+          {row.map((key) => {
+            const wrongCount = keyStats?.[key]?.wrong || 0;
+
+            return (
+              <div
+                key={key}
+                style={{
+                  width: "42px",
+                  height: "42px",
+                  margin: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: "6px",
+                  background: getHeatColor(wrongCount),
+                  fontWeight: "600",
+                  textTransform: "uppercase",
+                  transition: "background 0.3s ease"
+                }}
+              >
+                {key}
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>
