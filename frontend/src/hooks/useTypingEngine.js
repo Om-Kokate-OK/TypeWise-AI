@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export function useTypingEngine(targetText) {
+export function useTypingEngine(targetText, mode, timeUp) {
   const [input, setInput] = useState("");
   const [started, setStarted] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
@@ -12,6 +12,10 @@ export function useTypingEngine(targetText) {
 
   // 🔥 Phase 2 raw keystroke events (MISSING EARLIER)
   const [keystrokeEvents, setKeystrokeEvents] = useState([]);
+
+  const forceComplete = () => {
+  setIsCompleted(true);
+};
 
   const handleKeyPress = (value) => {
     if (isCompleted) return;
@@ -28,10 +32,11 @@ export function useTypingEngine(targetText) {
       // record backspace event
       setKeystrokeEvents((events) => [
         ...events,
-        { type: "backspace",
+        {
+          type: "backspace",
           timestamp: Date.now()
 
-         }
+        }
 
       ]);
 
@@ -69,7 +74,17 @@ export function useTypingEngine(targetText) {
 
     setInput(value);
 
-    if (value.length === targetText.length) {
+    // if (value.length === targetText.length) {
+    //   setIsCompleted(true);
+    // }
+
+    if (mode === "words") {
+      if (value.length >= targetText.length) {
+        setIsCompleted(true);
+      }
+    }
+
+    if (mode === "time" && timeUp) {
       setIsCompleted(true);
     }
   };
@@ -109,6 +124,8 @@ export function useTypingEngine(targetText) {
     keystrokeEvents,
 
     handleKeyPress,
-    resetEngine
+    resetEngine,
+
+    forceComplete
   };
 }
