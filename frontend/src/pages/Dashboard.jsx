@@ -7,6 +7,8 @@ import { useSessionTimer } from "../hooks/useSessionTimer";
 import { calculateWPM } from "../utils/wpmCalculator";
 import { analyzeBackspaceBehavior } from "../analytics/backspaceAnalytics";
 import { analyzeSpeedStability } from "../analytics/speedAnalytics";
+import KeyboardHeatmap from "../components/KeyboardHeatmap";
+import { useState } from "react";
 
 
 import {
@@ -40,19 +42,44 @@ export default function Dashboard() {
     typing.totalKeystrokes
   );
 
+  const [keyStatsState, setKeyStatsState] = useState({});
+
   // ✅ PHASE 2 ANALYTICS (FIXED)
+// useEffect(() => {
+//   if (!typing.isCompleted) return;
+
+//   const keyStats = analyzeKeyAccuracy(
+//     typing.keystrokeEvents
+//   );
+//   const weakKeys = rankWeakKeys(keyStats);
+
+//   const backspaceStats = analyzeBackspaceBehavior(
+//     typing.keystrokeEvents
+//   );
+
+//   const speedStats = analyzeSpeedStability(
+//     typing.keystrokeEvents
+//   );
+
+//   console.log("Key Stats:", keyStats);
+//   console.log("Weak Keys:", weakKeys);
+//   console.log("Backspace Stats:", backspaceStats);
+//   console.log("Speed Stats:", speedStats);
+// }, [typing.isCompleted, typing.keystrokeEvents]);
+
 useEffect(() => {
   if (!typing.isCompleted) return;
 
   const keyStats = analyzeKeyAccuracy(
     typing.keystrokeEvents
   );
-  const weakKeys = rankWeakKeys(keyStats);
 
+  setKeyStatsState(keyStats);
+
+  const weakKeys = rankWeakKeys(keyStats);
   const backspaceStats = analyzeBackspaceBehavior(
     typing.keystrokeEvents
   );
-
   const speedStats = analyzeSpeedStability(
     typing.keystrokeEvents
   );
@@ -62,7 +89,6 @@ useEffect(() => {
   console.log("Backspace Stats:", backspaceStats);
   console.log("Speed Stats:", speedStats);
 }, [typing.isCompleted, typing.keystrokeEvents]);
-
 
   return (
     <div
@@ -77,7 +103,7 @@ useEffect(() => {
     >
       <h2 style={{ marginBottom: "6px" }}>TypeWise AI</h2>
       <p style={{ marginBottom: "20px", color: "#64748b" }}>
-        Typing Skill Analyzer – Phase 2 (Analytics)
+        Typing Skill Analyzer - Phase 3 (HeatMap)
       </p>
 
       <TypingBox
@@ -95,6 +121,7 @@ useEffect(() => {
           }}
         >
           ✅ Test Completed
+          <KeyboardHeatmap keyStats={keyStatsState}/>
         </div>
       )}
 
