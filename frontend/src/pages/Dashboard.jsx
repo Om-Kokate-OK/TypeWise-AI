@@ -7,6 +7,7 @@ import { useSessionTimer } from "../hooks/useSessionTimer";
 import { calculateWPM } from "../utils/wpmCalculator";
 import { analyzeBackspaceBehavior } from "../analytics/backspaceAnalytics";
 import { analyzeSpeedStability } from "../analytics/speedAnalytics";
+import KeyboardHeatmap from "../components/KeyboardHeatmap";
 
 
 import {
@@ -95,6 +96,7 @@ useEffect(() => {
           }}
         >
           ✅ Test Completed
+          <KeyboardHeatmap />
         </div>
       )}
 
