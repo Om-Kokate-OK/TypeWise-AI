@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api/api";
 
+import { AuthContext } from "../context/AuthContext";
 import { generateAdaptiveText } from "../ai/adaptiveEngine";
 import { useTypingEngine } from "../hooks/useTypingEngine";
 import { useSessionTimer } from "../hooks/useSessionTimer";
@@ -17,6 +18,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const inputRef = useRef(null);
 
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
   /* ---------------- THEME STATE ---------------- */
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem("theme");
@@ -27,6 +30,7 @@ export default function Dashboard() {
   const [mode, setMode] = useState("words");
   const [wordLimit, setWordLimit] = useState(30);
   const [timeLimit, setTimeLimit] = useState(30);
+  const { user } = useContext(AuthContext); // Get user status
 
   /* ---------------- THEME EFFECT ---------------- */
   useEffect(() => {
@@ -61,6 +65,48 @@ export default function Dashboard() {
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
+
+ /* ---------------- MODIFIED SAVE/PREVIEW LOGIC ---------------- */
+  useEffect(() => {
+    if (!typing.isCompleted) return;
+
+    const processResults = async () => {
+      const keyStats = analyzeKeyAccuracy(typing.keystrokeEvents);
+      const weakKeys = rankWeakKeys(keyStats).map(k => k.key);
+      const stability = analyzeSpeedStability(typing.keystrokeEvents);
+
+      const sessionData = {
+        mode,
+        wordLimit,
+        timeLimit,
+        rawWPM: parseFloat(rawWPM),
+        netWPM: parseFloat(netWPM),
+        accuracy: parseFloat(accuracy),
+        correct: typing.correctFinalChars,
+        incorrect: typing.incorrectChars,
+        extra: typing.extraChars,
+        missed: typing.missedChars,
+        stabilityScore: stability.stabilityScore,
+        weakKeys,
+        isGuest: !user, // Mark as guest
+      };
+
+      if (user) {
+        // LOGGED IN: Save to DB then navigate using ID
+        try {
+          const { data } = await API.post("/sessions", sessionData);
+          navigate(`/results/${data._id}`);
+        } catch (err) {
+          console.error("Save error:", err);
+        }
+      } else {
+        // GUEST: Navigate directly to results with data in state (no DB storage)
+        navigate(`/results/preview`, { state: { guestData: sessionData } });
+      }
+    };
+
+    processResults();
+  }, [typing.isCompleted, user]);
   useEffect(() => {
     if (typing.isCompleted) return;
     if (mode === "time" && timer.time >= timeLimit) typing.forceComplete();
@@ -233,6 +279,72 @@ export default function Dashboard() {
           })}
         </div>
       </div>
+
+      {/* ---------------- LOGIN DIALOG MODAL ---------------- */}
+      {showLoginModal && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: "rgba(0,0,0,0.8)",
+          backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          zIndex: 1000,
+        }}>
+          <div style={{
+            background: "var(--bg)",
+            border: "1px solid var(--border)",
+            padding: "40px",
+            borderRadius: "16px",
+            maxWidth: "400px",
+            textAlign: "center",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.3)"
+          }}>
+            <div style={{ fontSize: "40px", marginBottom: "20px" }}>📊</div>
+            <h2 style={{ fontFamily: "var(--font-mono)", color: "var(--text)", marginBottom: "10px" }}>
+              Save your progress
+            </h2>
+            <p style={{ color: "var(--text-dim)", fontSize: "14px", lineHeight: "1.6", marginBottom: "30px" }}>
+              You finished the test with <span style={{ color: "var(--accent)", fontWeight: "bold" }}>{netWPM} WPM</span>! 
+              Log in to save this session, track your history, and analyze your weak keys.
+            </p>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <button
+                onClick={() => navigate("/login")}
+                style={{
+                  background: "var(--accent)",
+                  color: "#0d1117",
+                  border: "none",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  fontFamily: "var(--font-mono)"
+                }}
+              >
+                SIGN IN TO SAVE
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowLoginModal(false);
+                  resetTest();
+                }}
+                style={{
+                  background: "transparent",
+                  color: "var(--text-dim)",
+                  border: "1px solid var(--border)",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontFamily: "var(--font-mono)"
+                }}
+              >
+                DISCARD & RESTART
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* FOOTER STATS */}
       <div style={{

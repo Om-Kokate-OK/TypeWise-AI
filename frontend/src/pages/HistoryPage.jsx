@@ -7,11 +7,45 @@ export default function HistoryPage() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  /* ---------------- THEME STATE ---------------- */
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem("theme");
+    return saved ? saved === "dark" : true;
+  });
+
+  /* ---------------- THEME EFFECT ---------------- */
+  useEffect(() => {
+    const root = document.documentElement;
+    localStorage.setItem("theme", isDarkMode ? "dark" : "light");
+    
+    if (isDarkMode) {
+      root.style.setProperty("--bg", "#0d1117");
+      root.style.setProperty("--acc-bg", "#161b22");
+      root.style.setProperty("--text", "#e6edf3");
+      root.style.setProperty("--text-dim", "#484f58");
+      root.style.setProperty("--accent", "#f59e0b");
+      root.style.setProperty("--border", "#30363d");
+      root.style.setProperty("--success", "#3fb950");
+      root.style.setProperty("--error", "#f85149");
+    } else {
+      root.style.setProperty("--bg", "#ffffff");
+      root.style.setProperty("--acc-bg", "#f6f8fa");
+      root.style.setProperty("--text", "#1f2328");
+      root.style.setProperty("--text-dim", "#8c959f");
+      root.style.setProperty("--accent", "#0969da");
+      root.style.setProperty("--border", "#d0d7de");
+      root.style.setProperty("--success", "#1a7f37");
+      root.style.setProperty("--error", "#cf222e");
+    }
+  }, [isDarkMode]);
+
+  /* ---------------- DATA FETCHING ---------------- */
   useEffect(() => {
     async function fetchSessions() {
       try {
         const { data } = await API.get("/sessions");
-        setSessions(data);
+        // Sort sessions by date (newest first)
+        setSessions(data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
       } catch (err) {
         console.error("Failed to fetch sessions:", err);
       } finally {
@@ -34,137 +68,152 @@ export default function HistoryPage() {
     : 0;
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      <Header />
+    <div style={{ 
+      minHeight: "100vh", 
+      backgroundColor: "var(--bg)", 
+      color: "var(--text)",
+      display: "flex", 
+      flexDirection: "column",
+      transition: "background 0.3s ease"
+    }}>
+      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
 
-      <div className="page-container">
+      <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "40px 20px", width: "100%" }}>
+        
         {/* Page Title */}
-        <div style={{ marginBottom: 36 }}>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", color: "var(--text-dim)", marginBottom: 8 }}>
-            // session log
+        <div style={{ marginBottom: 40 }}>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", color: "var(--accent)", marginBottom: 8 }}>
+            // personal_archives
           </div>
-          <h1 style={{ fontFamily: "var(--font-mono)", fontSize: 28, fontWeight: 700, letterSpacing: "-1px" }}>
-            Your <span style={{ color: "var(--accent)" }}>History</span>
+          <h1 style={{ fontSize: 36, fontWeight: 800, margin: 0, letterSpacing: "-1.5px" }}>
+            Typing <span style={{ color: "var(--accent)" }}>History</span>
           </h1>
         </div>
 
         {/* Summary Cards */}
-        <div className="stats-grid" style={{ marginBottom: 32 }}>
-          <div className="stat-box">
-            <div className="stat-label">Total Tests</div>
-            <div className="stat-value">{totalTests}</div>
-          </div>
-          <div className="stat-box">
-            <div className="stat-label">Avg WPM</div>
-            <div className="stat-value" style={{ color: "var(--info)" }}>{avgWPM}</div>
-          </div>
-          <div className="stat-box">
-            <div className="stat-label">Avg Accuracy</div>
-            <div className="stat-value" style={{ color: "var(--success)" }}>{avgAcc}%</div>
-          </div>
-          <div className="stat-box">
-            <div className="stat-label">Best WPM</div>
-            <div className="stat-value" style={{ color: "var(--accent)" }}>{bestWPM}</div>
-          </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 48 }}>
+          <StatBox label="Total Tests" value={totalTests} />
+          <StatBox label="Avg Speed" value={avgWPM} suffix=" WPM" color="var(--accent)" />
+          <StatBox label="Avg Accuracy" value={avgAcc} suffix="%" color="var(--success)" />
+          <StatBox label="Best Speed" value={bestWPM} suffix=" WPM" color="var(--accent)" />
         </div>
 
-        <div className="section-divider" />
-
-        {/* Loading State */}
-        {loading && (
-          <div style={{ textAlign: "center", padding: 40, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-dim)" }}>
-            Loading sessions...
-          </div>
-        )}
-
-        {/* Empty State */}
-        {!loading && sessions.length === 0 && (
-          <div style={{ textAlign: "center", padding: 60 }}>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 14, color: "var(--text-dim)", marginBottom: 16 }}>
-              No sessions yet
+        {/* Main Content Area */}
+        <div style={{ 
+            background: "var(--acc-bg)", 
+            borderRadius: "16px", 
+            border: "1px solid var(--border)",
+            overflow: "hidden"
+        }}>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 60, fontFamily: "var(--font-mono)", color: "var(--text-dim)" }}>
+              fetching_data...
             </div>
-            <Link to="/">
-              <button style={{ color: "var(--accent)", borderColor: "rgba(245,158,11,0.3)" }}>
-                START TYPING
-              </button>
-            </Link>
-          </div>
-        )}
-
-        {/* Session Table */}
-        {!loading && sessions.length > 0 && (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "var(--font-mono)", fontSize: 13 }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {["Date", "Mode", "Net WPM", "Raw WPM", "Accuracy", "Stability", ""].map((h) => (
-                    <th
-                      key={h}
+          ) : sessions.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 80 }}>
+              <div style={{ fontSize: 16, color: "var(--text-dim)", marginBottom: 24 }}>Your history is empty.</div>
+              <Link to="/">
+                <button style={{ 
+                    background: "var(--accent)", 
+                    border: "none", 
+                    color: isDarkMode ? "#000" : "#fff", 
+                    padding: "12px 32px", 
+                    borderRadius: "8px", 
+                    fontWeight: "bold", 
+                    cursor: "pointer" 
+                }}>
+                  START FIRST TEST
+                </button>
+              </Link>
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "var(--font-mono)" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border)", background: "rgba(0,0,0,0.05)" }}>
+                    {["Date", "Mode", "Net WPM", "Raw", "Accuracy", "Stability", ""].map((h) => (
+                      <th key={h} style={{ padding: "16px", textAlign: "left", fontSize: 10, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "1px" }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.map((s, idx) => (
+                    <tr
+                      key={s._id}
+                      className="history-row"
                       style={{
-                        padding: "12px 14px",
-                        textAlign: "left",
-                        fontSize: 10,
-                        letterSpacing: "0.15em",
-                        textTransform: "uppercase",
-                        color: "var(--text-dim)",
-                        fontWeight: 500,
+                        borderBottom: "1px solid var(--border)",
+                        transition: "background 0.2s",
                       }}
                     >
-                      {h}
-                    </th>
+                      <td style={{ padding: "16px", color: "var(--text-dim)", fontSize: 13 }}>
+                        {new Date(s.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                      </td>
+                      <td style={{ padding: "16px" }}>
+                        <span style={{
+                          fontSize: 10,
+                          padding: "2px 8px",
+                          borderRadius: "4px",
+                          border: "1px solid var(--border)",
+                          textTransform: "uppercase",
+                          color: "var(--text-dim)"
+                        }}>
+                          {s.mode} {s.mode === "words" ? s.wordLimit : `${s.timeLimit}s`}
+                        </span>
+                      </td>
+                      <td style={{ padding: "16px", fontWeight: 800, fontSize: 18 }}>{s.netWPM}</td>
+                      <td style={{ padding: "16px", color: "var(--text-dim)" }}>{s.rawWPM}</td>
+                      <td style={{ padding: "16px", fontWeight: 700, color: s.accuracy >= 95 ? "var(--success)" : "var(--accent)" }}>
+                        {s.accuracy}%
+                      </td>
+                      <td style={{ padding: "16px", color: "var(--text-dim)" }}>
+                        {s.stabilityScore ?? "—"}
+                      </td>
+                      <td style={{ padding: "16px", textAlign: "right" }}>
+                        <Link to={`/results/${s._id}`} style={{ textDecoration: "none" }}>
+                          <button style={{ 
+                            fontSize: 10, 
+                            padding: "6px 12px", 
+                            color: "var(--accent)", 
+                            background: "transparent", 
+                            border: "1px solid var(--border)",
+                            borderRadius: "4px",
+                            cursor: "pointer",
+                            fontWeight: "bold"
+                          }}>
+                            DETAILS
+                          </button>
+                        </Link>
+                      </td>
+                    </tr>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map((s, idx) => (
-                  <tr
-                    key={s._id}
-                    style={{
-                      borderBottom: "1px solid var(--border)",
-                      transition: "background 0.15s",
-                      background: idx % 2 === 0 ? "transparent" : "rgba(13,17,23,0.4)",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--accent-glow)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = idx % 2 === 0 ? "transparent" : "rgba(13,17,23,0.4)")}
-                  >
-                    <td style={{ padding: "14px", color: "var(--text-muted)" }}>
-                      {new Date(s.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                    </td>
-                    <td style={{ padding: "14px" }}>
-                      <span style={{
-                        padding: "3px 8px",
-                        borderRadius: 4,
-                        fontSize: 10,
-                        letterSpacing: "0.1em",
-                        textTransform: "uppercase",
-                        background: s.mode === "time" ? "rgba(56,189,248,0.1)" : "rgba(168,85,247,0.1)",
-                        color: s.mode === "time" ? "#38bdf8" : "#a855f7",
-                        border: `1px solid ${s.mode === "time" ? "rgba(56,189,248,0.2)" : "rgba(168,85,247,0.2)"}`,
-                      }}>
-                        {s.mode} {s.mode === "words" ? s.wordLimit : `${s.timeLimit}s`}
-                      </span>
-                    </td>
-                    <td style={{ padding: "14px", fontWeight: 700, color: "var(--text)" }}>{s.netWPM}</td>
-                    <td style={{ padding: "14px", color: "var(--text-muted)" }}>{s.rawWPM}</td>
-                    <td style={{ padding: "14px", color: s.accuracy >= 95 ? "var(--success)" : s.accuracy >= 80 ? "var(--accent)" : "var(--error)" }}>
-                      {s.accuracy}%
-                    </td>
-                    <td style={{ padding: "14px", color: "var(--text-muted)" }}>
-                      {s.stabilityScore ?? "—"}
-                    </td>
-                    <td style={{ padding: "14px", textAlign: "right" }}>
-                      <Link to={`/results/${s._id}`}>
-                        <button style={{ fontSize: 10, padding: "4px 10px", color: "var(--accent)", borderColor: "rgba(245,158,11,0.2)", background: "transparent" }}>
-                          VIEW
-                        </button>
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <style>{`
+        .history-row:hover {
+          background-color: var(--accent-glow) !important;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/* ── Helper Component ── */
+function StatBox({ label, value, suffix = "", color = "var(--text)" }) {
+  return (
+    <div style={{ background: "var(--acc-bg)", border: "1px solid var(--border)", padding: "20px", borderRadius: "12px" }}>
+      <div style={{ fontSize: 10, color: "var(--text-dim)", fontFamily: "var(--font-mono)", marginBottom: 8, textTransform: "uppercase" }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 24, fontWeight: 800, color }}>
+        {value}<span style={{ fontSize: 14 }}>{suffix}</span>
       </div>
     </div>
   );
