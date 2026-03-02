@@ -1,49 +1,110 @@
 import { useState, useContext } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import API from "../api/api";
 import { AuthContext } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
 
 export default function Login() {
-  const [form, setForm] = useState({
-    email: "",
-    password: "",
-  });
+  const [form, setForm] = useState({ email: "", password: "" });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
+    setLoading(true);
 
     try {
       const { data } = await API.post("/auth/login", form);
-
       login(data.token);
       navigate("/");
     } catch (err) {
-      alert(err.response?.data?.message || "Error");
+      setError(err.response?.data?.message || "Login failed");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div>
-      <h2>Login</h2>
-      <form onSubmit={handleSubmit}>
-        <input
-          placeholder="Email"
-          onChange={(e) =>
-            setForm({ ...form, email: e.target.value })
-          }
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          onChange={(e) =>
-            setForm({ ...form, password: e.target.value })
-          }
-        />
-        <button type="submit">Login</button>
-      </form>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ width: "100%", maxWidth: 380, padding: "0 24px" }}>
+        {/* Header */}
+        <div style={{ marginBottom: 40, textAlign: "center" }}>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", color: "var(--text-dim)", marginBottom: 12 }}>
+            // welcome back
+          </div>
+          <h1 style={{ fontFamily: "var(--font-mono)", fontSize: 32, fontWeight: 700, letterSpacing: "-1px" }}>
+            Sign <span style={{ color: "var(--accent)" }}>in</span>
+          </h1>
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius)", padding: "10px 14px", marginBottom: 20, fontFamily: "var(--font-mono)", fontSize: 12, color: "#ef4444" }}>
+            {error}
+          </div>
+        )}
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--text-dim)", marginBottom: 6, display: "block" }}>Email</label>
+            <input
+              type="email"
+              placeholder="you@email.com"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              required
+            />
+          </div>
+
+          <div>
+            <label style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--text-dim)", marginBottom: 6, display: "block" }}>Password</label>
+            <input
+              type="password"
+              placeholder="********"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              marginTop: 8,
+              padding: "12px",
+              background: "var(--accent)",
+              color: "#0d1117",
+              border: "none",
+              borderRadius: "var(--radius)",
+              fontWeight: 700,
+              fontSize: 12,
+              letterSpacing: "0.1em",
+              cursor: loading ? "wait" : "pointer",
+              opacity: loading ? 0.7 : 1,
+              transition: "opacity 0.2s",
+            }}
+          >
+            {loading ? "SIGNING IN..." : "SIGN IN"}
+          </button>
+        </form>
+
+        {/* Footer */}
+        <div style={{ textAlign: "center", marginTop: 28, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-dim)" }}>
+          No account?{" "}
+          <Link to="/register" style={{ color: "var(--accent)", fontWeight: 600 }}>Register</Link>
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 16 }}>
+          <Link to="/" style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)" }}>
+            &larr; back to typing
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

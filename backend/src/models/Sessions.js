@@ -12,6 +12,10 @@ const sessionSchema = new mongoose.Schema({
   rawWPM: Number,
   netWPM: Number,
   accuracy: Number,
+  correct: Number,
+  incorrect: Number,
+  extra: Number,
+  missed: Number,
   stabilityScore: Number,
   weakKeys: [String]
 }, { timestamps: true });

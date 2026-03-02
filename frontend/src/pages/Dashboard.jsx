@@ -1,108 +1,73 @@
-import { useState, useEffect, useContext } from "react";
-
-import TypingBox from "../components/TypingBox";
-import ResultPanel from "../components/ResultPanel";
-import KeyboardHeatmap from "../components/KeyboardHeatmap";
-import LoginPromptModal from "../components/LoginPromptModal";
-
-import { getRandomText } from "../data/textSamples";
-import { generateAdaptiveText } from "../ai/adaptiveEngine";
-
-import { useTypingEngine } from "../hooks/useTypingEngine";
-import { useSessionTimer } from "../hooks/useSessionTimer";
-
-import { AuthContext } from "../context/AuthContext";
-
-import { calculateStats } from "../utils/wpmCalculator";
-
-import { analyzeBackspaceBehavior } from "../analytics/backspaceAnalytics";
-import { analyzeSpeedStability } from "../analytics/speedAnalytics";
-import { analyzeKeyAccuracy } from "../analytics/keyAnalytics";
-import { rankWeakKeys } from "../analytics/weakKeyAnalyzer";
-
-
-// backend
-
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import API from "../api/api";
 
+import { generateAdaptiveText } from "../ai/adaptiveEngine";
+import { useTypingEngine } from "../hooks/useTypingEngine";
+import { useSessionTimer } from "../hooks/useSessionTimer";
+import { calculateStats } from "../utils/wpmCalculator";
+
+import { analyzeKeyAccuracy } from "../analytics/keyAnalytics";
+import { rankWeakKeys } from "../analytics/weakKeyAnalyzer";
+import { analyzeSpeedStability } from "../analytics/speedAnalytics";
+
+import Header from "../components/Header";
+
 export default function Dashboard() {
-  /* --------------------------------------------------
-     AUTH CONTEXT
-  -------------------------------------------------- */
-  const {
-    user,
-    isGuest,
-    guestTestCount,
-    incrementGuestTestCount,
-    logout,
-  } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const inputRef = useRef(null);
 
-  // Login prompt modal visibility
-  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  /* ---------------- THEME STATE ---------------- */
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem("theme");
+    return saved ? saved === "dark" : true;
+  });
 
-  /* --------------------------------------------------
-     BASIC STATE
-  -------------------------------------------------- */
-
-  // Current paragraph / words to type
-  // const [text, setText] = useState(getRandomText());
-
-  // Performance summary after test completion
-  const [performance, setPerformance] = useState(null);
-
-  // Mode can be: "words" OR "time"
+  /* ---------------- ENGINE STATE ---------------- */
   const [mode, setMode] = useState("words");
-
-  // Word limit for words mode
-  const [wordLimit, setWordLimit] = useState(40);
-
-  const [text, setText] = useState(() =>
-    generateAdaptiveText(null, [], wordLimit)
-  );
-  // Time limit for time mode
+  const [wordLimit, setWordLimit] = useState(30);
   const [timeLimit, setTimeLimit] = useState(30);
 
-  // Stores per-key accuracy data (for heatmap)
-  const [keyStatsState, setKeyStatsState] = useState({});
+  /* ---------------- THEME EFFECT ---------------- */
+  useEffect(() => {
+    const root = document.documentElement;
+    localStorage.setItem("theme", isDarkMode ? "dark" : "light");
 
-  /* --------------------------------------------------
-     TYPING ENGINE
-     (Must be declared BEFORE timer uses it)
-  -------------------------------------------------- */
+    if (isDarkMode) {
+      root.style.setProperty("--bg", "#0d1117");
+      root.style.setProperty("--acc-bg", "#161b22");
+      root.style.setProperty("--text", "#e6edf3");
+      root.style.setProperty("--text-dim", "#484f58");
+      root.style.setProperty("--accent", "#f59e0b");
+      root.style.setProperty("--border", "#30363d");
+      root.style.setProperty("--success", "#3fb950");
+      root.style.setProperty("--error", "#f85149");
+    } else {
+      root.style.setProperty("--bg", "#ffffff");
+      root.style.setProperty("--acc-bg", "#f6f8fa");
+      root.style.setProperty("--text", "#1f2328");
+      root.style.setProperty("--text-dim", "#8c959f");
+      root.style.setProperty("--accent", "#0969da");
+      root.style.setProperty("--border", "#d0d7de");
+      root.style.setProperty("--success", "#1a7f37");
+      root.style.setProperty("--error", "#cf222e");
+    }
+  }, [isDarkMode]);
 
+  /* ---------------- TYPING LOGIC ---------------- */
+  const [text, setText] = useState(() => generateAdaptiveText(null, [], wordLimit));
   const typing = useTypingEngine(text, mode);
+  const timer = useSessionTimer(typing.started && !typing.isCompleted);
 
-  /* --------------------------------------------------
-     TIMER (depends on typing state)
-  -------------------------------------------------- */
-
-  const timer = useSessionTimer(
-    typing.started && !typing.isCompleted
-  );
-
-  /* --------------------------------------------------
-     TIME MODE LOGIC
-  -------------------------------------------------- */
-
-  // Check if time limit is reached
-  const timeUp =
-    mode === "time" && timer.time >= timeLimit;
+  useEffect(() => { inputRef.current?.focus(); }, []);
 
   useEffect(() => {
-    if (timeUp && !typing.isCompleted) {
-      typing.forceComplete();
-    }
-  }, [timeUp, typing.isCompleted]);
+    if (typing.isCompleted) return;
+    if (mode === "time" && timer.time >= timeLimit) typing.forceComplete();
+    if (mode === "words" && typing.input.length >= text.length) typing.forceComplete();
+  }, [timer.time, typing.input]);
 
-  /* --------------------------------------------------
-     CALCULATIONS
-  -------------------------------------------------- */
-
-  // Use fixed time in time mode
-  const effectiveTime =
-    mode === "time" ? timeLimit : timer.time;
-
-  // Compute all stats using the new formula
+  const effectiveTime = mode === "time" ? timeLimit : timer.time;
   const { rawWPM, netWPM, accuracy } = calculateStats({
     correctChars: typing.correctFinalChars,
     incorrectChars: typing.incorrectChars,
@@ -111,474 +76,222 @@ export default function Dashboard() {
     timeInSeconds: effectiveTime,
   });
 
-  /* --------------------------------------------------
-     WHEN TEST COMPLETES → RUN ANALYTICS
-  -------------------------------------------------- */
-
+  /* ---------------- SAVE DATA ---------------- */
   useEffect(() => {
     if (!typing.isCompleted) return;
+    const saveSession = async () => {
+      try {
+        const keyStats = analyzeKeyAccuracy(typing.keystrokeEvents);
+        const weakKeys = rankWeakKeys(keyStats).map(k => k.key);
+        const stability = analyzeSpeedStability(typing.keystrokeEvents);
 
-    const processAnalytics = async () => {
-      const keyStats = analyzeKeyAccuracy(
-        typing.keystrokeEvents
-      );
-      setKeyStatsState(keyStats);
-
-      const weakKeys = rankWeakKeys(keyStats).map(
-        (k) => k.key
-      );
-
-      const backspaceStats =
-        analyzeBackspaceBehavior(
-          typing.keystrokeEvents
-        );
-
-      const speedStats =
-        analyzeSpeedStability(
-          typing.keystrokeEvents
-        );
-
-      const performanceSummary = {
-        stabilityScore: speedStats.stabilityScore,
-        wpm: parseFloat(netWPM),
-        correctionRatio:
-          backspaceStats.correctionRatio,
-      };
-
-      setPerformance(performanceSummary);
-
-      // --------------------------------------------------
-      // GUEST FLOW: store in sessionStorage temp DB
-      // --------------------------------------------------
-      if (isGuest) {
-        const tempSession = {
-          mode,
-          wordLimit,
-          timeLimit,
+        const sessionData = {
+          mode, wordLimit, timeLimit,
           rawWPM: parseFloat(rawWPM),
           netWPM: parseFloat(netWPM),
           accuracy: parseFloat(accuracy),
-          stabilityScore: performanceSummary.stabilityScore,
+          correct: typing.correctFinalChars,
+          incorrect: typing.incorrectChars,
+          extra: typing.extraChars,
+          missed: typing.missedChars,
+          stabilityScore: stability.stabilityScore,
           weakKeys,
-          timestamp: Date.now(),
         };
 
-        // Overwrite previous session (temp — removed each time)
-        sessionStorage.setItem(
-          "guestSessions",
-          JSON.stringify([tempSession])
-        );
-
-        incrementGuestTestCount();
-
-        // On 2nd+ test as guest, show login prompt
-        if (guestTestCount >= 1) {
-          setShowLoginPrompt(true);
-        }
-
-        return; // don't save to backend
-      }
-
-      // --------------------------------------------------
-      // LOGGED-IN: save to backend
-      // --------------------------------------------------
-      try {
-        await API.post("/sessions", {
-          mode,
-          wordLimit,
-          timeLimit,
-          rawWPM: parseFloat(rawWPM),
-          netWPM: parseFloat(netWPM),
-          accuracy: parseFloat(accuracy),
-          stabilityScore:
-            performanceSummary.stabilityScore,
-          weakKeys,
-        });
-      } catch (err) {
-        console.error("Session save failed", err);
-      }
+        const { data } = await API.post("/sessions", sessionData);
+        navigate(`/results/${data._id}`, { state: { weakKeys, performance: { stabilityScore: stability.stabilityScore, wpm: netWPM } } });
+      } catch (err) { console.error("Save error:", err); }
     };
-
-    processAnalytics();
+    saveSession();
   }, [typing.isCompleted]);
 
-
-  /* --------------------------------------------------
-     UI
-  -------------------------------------------------- */
+  /* ---------------- HANDLERS ---------------- */
+  const resetTest = () => {
+    setText(generateAdaptiveText(null, [], wordLimit));
+    typing.resetEngine();
+    timer.resetTimer();
+    inputRef.current?.focus();
+  };
 
   return (
-    <div
-      style={{
-        maxWidth: "720px",
-        margin: "40px auto",
-        padding: "20px",
-        background: "#ffffff",
-        borderRadius: "12px",
-        boxShadow: "0 10px 25px rgba(0,0,0,0.08)",
-      }}
-    >
-      {/* LOGIN PROMPT MODAL */}
-      {showLoginPrompt && (
-        <LoginPromptModal
-          onClose={() => setShowLoginPrompt(false)}
-          message="Sign in to save your session history, track progress, and unlock adaptive key-improvement insights."
+    <div style={{
+      minHeight: "100vh",
+      backgroundColor: "var(--bg)",
+      color: "var(--text)",
+      display: "flex",
+      flexDirection: "column",
+      transition: "background 0.3s ease, color 0.3s ease"
+    }}>
+      {/* Passing theme state to Header */}
+      <Header isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+
+      {/* TOP CONFIG BAR */}
+      <div style={{ padding: "40px 0 20px 0" }}>
+        {/* MODE SELECTOR */}
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: "15px" }}>
+          <div style={{ display: "flex", background: "var(--acc-bg)", padding: "4px", borderRadius: "10px", border: "1px solid var(--border)" }}>
+            {["words", "time"].map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                style={{
+                  background: mode === m ? "var(--bg)" : "transparent",
+                  border: "none",
+                  color: mode === m ? "var(--accent)" : "var(--text-dim)",
+                  padding: "6px 20px",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                  transition: "0.2s"
+                }}
+              >
+                {m.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* SUB-OPTIONS (Word/Time amounts) */}
+        <div style={{ display: "flex", justifyContent: "center", gap: "20px" }}>
+          {(mode === "words" ? [10, 15, 30, 60, 100] : [15, 30, 60, 120]).map((val) => (
+            <button
+              key={val}
+              onClick={() => {
+                if (mode === "words") {
+                  setWordLimit(val);
+                  setText(generateAdaptiveText(null, [], val));
+                } else {
+                  setTimeLimit(val);
+                }
+                typing.resetEngine();
+                timer.resetTimer();
+              }}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: (mode === "words" ? wordLimit : timeLimit) === val ? "var(--accent)" : "var(--text-dim)",
+                cursor: "pointer",
+                fontFamily: "var(--font-mono)",
+                fontSize: "14px",
+                transition: "0.2s",
+                fontWeight: (mode === "words" ? wordLimit : timeLimit) === val ? "bold" : "normal"
+              }}
+            >
+              {val}{mode === "time" && "s"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* MAIN TYPING AREA */}
+      <div
+        onClick={() => inputRef.current.focus()}
+        style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", padding: "0 10%", cursor: "text" }}
+      >
+        <input
+          ref={inputRef}
+          value={typing.input}
+          onChange={(e) => typing.handleKeyPress(e.target.value)}
+          style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
         />
-      )}
 
-      {/* HEADER BAR */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "6px",
-        }}
-      >
-        <h2 style={{ margin: 0 }}>TypeWise AI</h2>
+        <div style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: "32px",
+          lineHeight: "1.5",
+          textAlign: "left",
+          maxWidth: "1000px",
+          position: "relative",
+          userSelect: "none",
+          filter: typing.isCompleted ? "blur(4px)" : "none",
+          transition: "filter 0.3s"
+        }}>
+          {text.split("").map((char, index) => {
+            const typed = typing.input[index];
+            const isCurrent = index === typing.input.length;
 
-        {/* Logout / Login buttons */}
-        {user ? (
-          <button
-            onClick={() => {
-              logout();
-              window.location.reload();
-            }}
-            style={{
-              padding: "6px 16px",
-              borderRadius: "6px",
-              border: "1px solid #ef4444",
-              background: "#fff",
-              color: "#ef4444",
-              fontWeight: 600,
-              cursor: "pointer",
-              fontSize: "13px",
-            }}
-          >
-            Logout
-          </button>
-        ) : (
-          <button
-            onClick={() => setShowLoginPrompt(true)}
-            style={{
-              padding: "6px 16px",
-              borderRadius: "6px",
-              border: "1px solid #2563eb",
-              background: "#fff",
-              color: "#2563eb",
-              fontWeight: 600,
-              cursor: "pointer",
-              fontSize: "13px",
-            }}
-          >
-            Login
-          </button>
-        )}
-      </div>
+            let color = "var(--text-dim)";
+            let bgColor = "transparent";
 
-      <p
-        style={{
-          marginBottom: "20px",
-          color: "#64748b",
-        }}
-      >
-        Typing Skill Analyzer - Phase 3 (HeatMap)
-      </p>
-
-      {/* WORD LIMIT BUTTONS (only in words mode) */}
-      {mode === "words" && (
-        <div
-          style={{
-            marginBottom: "20px",
-            textAlign: "center",
-          }}
-        >
-          {[25, 40, 50].map((count) => (
-            <button
-              key={count}
-              disabled={typing.started && !typing.isCompleted}
-              onClick={() => {
-                if (typing.started && !typing.isCompleted) return;
-                setWordLimit(count);
-                setText(
-                  generateAdaptiveText(
-                    performance,
-                    [],
-                    count
-                  )
-                );
-                typing.resetEngine();
-                timer.resetTimer();
-              }}
-              style={{
-                margin: "0 5px",
-                padding: "6px 12px",
-                borderRadius: "6px",
-                border:
-                  wordLimit === count
-                    ? "2px solid #2563eb"
-                    : "1px solid #ccc",
-                background: "white",
-                cursor:
-                  typing.started && !typing.isCompleted
-                    ? "not-allowed"
-                    : "pointer",
-                opacity:
-                  typing.started && !typing.isCompleted
-                    ? 0.5
-                    : 1,
-              }}
-            >
-              {count} Words
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* MODE BUTTONS */}
-      <div
-        style={{
-          marginBottom: "10px",
-          textAlign: "center",
-        }}
-      >
-        {["words", "time"].map((m) => (
-          <button
-            key={m}
-            disabled={typing.started && !typing.isCompleted}
-            onClick={() => {
-              if (typing.started && !typing.isCompleted) return;
-              setMode(m);
-              setText(
-                generateAdaptiveText(
-                  performance,
-                  [],
-                  m === "words" ? wordLimit : 50
-                )
-              );
-              typing.resetEngine();
-              timer.resetTimer();
-            }}
-            style={{
-              margin: "0 5px",
-              padding: "6px 12px",
-              borderRadius: "6px",
-              border:
-                mode === m
-                  ? "2px solid #2563eb"
-                  : "1px solid #ccc",
-              background: "white",
-              cursor:
-                typing.started && !typing.isCompleted
-                  ? "not-allowed"
-                  : "pointer",
-              opacity:
-                typing.started && !typing.isCompleted
-                  ? 0.5
-                  : 1,
-            }}
-          >
-            {m.toUpperCase()}
-          </button>
-        ))}
-      </div>
-
-      {/* TIME LIMIT BUTTONS */}
-      {mode === "time" && (
-        <div
-          style={{
-            marginBottom: "20px",
-            textAlign: "center",
-          }}
-        >
-          {[15, 30, 60].map((sec) => (
-            <button
-              key={sec}
-              disabled={typing.started && !typing.isCompleted}
-              onClick={() => {
-                if (typing.started && !typing.isCompleted) return;
-                setTimeLimit(sec);
-                typing.resetEngine();
-                timer.resetTimer();
-              }}
-              style={{
-                margin: "0 5px",
-                padding: "6px 12px",
-                borderRadius: "6px",
-                border:
-                  timeLimit === sec
-                    ? "2px solid #2563eb"
-                    : "1px solid #ccc",
-                background: "white",
-                cursor:
-                  typing.started && !typing.isCompleted
-                    ? "not-allowed"
-                    : "pointer",
-                opacity:
-                  typing.started && !typing.isCompleted
-                    ? 0.5
-                    : 1,
-              }}
-            >
-              {sec}s
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* TYPING BOX */}
-      <TypingBox
-        text={text}
-        value={typing.input}
-        onChange={typing.handleKeyPress}
-      />
-
-      {/* COMPLETION MESSAGE + HEATMAP */}
-      {typing.isCompleted && (
-        <div
-          style={{
-            marginTop: "10px",
-            color: "#16a34a",
-            fontWeight: "600",
-          }}
-        >
-          ✅ Test Completed
-          <KeyboardHeatmap
-            keyStats={keyStatsState}
-          />
-        </div>
-      )}
-
-      {/* RESULT PANEL */}
-      <ResultPanel
-        time={timer.time}
-        rawWPM={rawWPM}
-        netWPM={netWPM}
-        accuracy={accuracy}
-        correct={typing.correctFinalChars}
-        incorrect={typing.incorrectChars}
-        extra={typing.extraChars}
-        missed={typing.missedChars}
-      />
-
-
-      {/* ADAPTIVE TEST BUTTON */}
-      {typing.isCompleted && performance && (
-        <>
-          {user ? (
-            <button
-              onClick={() => {
-                const keyStats =
-                  analyzeKeyAccuracy(
-                    typing.keystrokeEvents
-                  );
-
-                const weakKeys =
-                  rankWeakKeys(keyStats).map(
-                    (k) => k.key
-                  );
-
-                const newText =
-                  generateAdaptiveText(
-                    performance,
-                    weakKeys,
-                    mode === "words"
-                      ? wordLimit
-                      : 50
-                  );
-
-                setText(newText);
-                typing.resetEngine();
-                timer.resetTimer();
-              }}
-              style={{
-                marginTop: "20px",
-                padding: "10px 20px",
-                borderRadius: "6px",
-                border: "none",
-                background: "#2563eb",
-                color: "white",
-                cursor: "pointer",
-              }}
-            >
-              Start Adaptive Test
-            </button>
-          ) : (
-            <button
-              onClick={() => setShowLoginPrompt(true)}
-              style={{
-                marginTop: "20px",
-                padding: "10px 20px",
-                borderRadius: "6px",
-                border: "none",
-                background: "#94a3b8",
-                color: "white",
-                cursor: "pointer",
-              }}
-            >
-              🔒 Login to Unlock Adaptive Test
-            </button>
-          )}
-
-          {/* RETRY (available to everyone) */}
-          <button
-            onClick={() => {
-              setText(
-                generateAdaptiveText(
-                  null,
-                  [],
-                  mode === "words" ? wordLimit : 50
-                )
-              );
-              typing.resetEngine();
-              timer.resetTimer();
-              // Clear guest temp data on new test
-              if (isGuest) {
-                sessionStorage.removeItem("guestSessions");
+            if (typed != null) {
+              if (typed === char) {
+                color = "var(--text)";
+              } else {
+                color = "var(--error)";
+                if (char === " ") bgColor = "rgba(239, 68, 68, 0.2)";
               }
-            }}
-            style={{
-              marginTop: "10px",
-              marginLeft: "10px",
-              padding: "10px 20px",
-              borderRadius: "6px",
-              border: "1px solid #e2e8f0",
-              background: "#f8fafc",
-              color: "#334155",
-              cursor: "pointer",
-            }}
-          >
-            Retry New Test
-          </button>
-        </>
-      )}
+            }
 
-      {/* GUEST INFO BANNER */}
-      {isGuest && !typing.isCompleted && (
-        <p
+            return (
+              <span key={index} style={{ color, backgroundColor: bgColor, position: "relative" }}>
+                {isCurrent && <span className="custom-caret" />}
+                {char}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* FOOTER STATS */}
+      <div style={{
+        padding: "30px 40px",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        gap: "80px",
+        borderTop: "1px solid var(--border)",
+        background: "var(--acc-bg)"
+      }}>
+        <StatBlock label="WPM" value={netWPM} />
+        <StatBlock label="ACC" value={`${accuracy}%`} color={accuracy < 90 ? "var(--error)" : "var(--success)"} />
+        <StatBlock label="TIME" value={`${mode === "time" ? Math.max(0, timeLimit - timer.time) : timer.time}s`} />
+
+        <button
+          onClick={resetTest}
           style={{
-            marginTop: "16px",
-            padding: "10px 14px",
-            background: "#fef3c7",
-            borderRadius: "8px",
-            color: "#92400e",
-            fontSize: "13px",
-            textAlign: "center",
+            background: "transparent",
+            border: "1px solid var(--border)",
+            color: "var(--text-dim)",
+            padding: "8px 24px",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontFamily: "var(--font-mono)",
+            fontSize: "12px",
+            transition: "all 0.2s"
           }}
+          onMouseEnter={(e) => e.target.style.color = "var(--text)"}
+          onMouseLeave={(e) => e.target.style.color = "var(--text-dim)"}
         >
-          You&apos;re in guest mode — session data is temporary.{" "}
-          <span
-            onClick={() => setShowLoginPrompt(true)}
-            style={{
-              textDecoration: "underline",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
-          >
-            Login to save progress
-          </span>
-        </p>
-      )}
+          RESTART
+        </button>
+      </div>
+
+      <style>{`
+        .custom-caret {
+          position: absolute;
+          left: -1px;
+          top: 10%;
+          width: 2px;
+          height: 80%;
+          background: var(--accent);
+          animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function StatBlock({ label, value, color = "var(--text)" }) {
+  return (
+    <div style={{ textAlign: "center", minWidth: "80px" }}>
+      <div style={{ fontSize: "12px", color: "var(--text-dim)", marginBottom: "5px", fontFamily: "var(--font-mono)" }}>{label}</div>
+      <div style={{ fontSize: "28px", fontWeight: "bold", color, fontFamily: "var(--font-mono)" }}>{value}</div>
     </div>
   );
 }

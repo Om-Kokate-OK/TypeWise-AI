@@ -30,6 +30,16 @@ export const register = async (req, res) => {
   }
 };
 
+export const getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user).select("-password");
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
