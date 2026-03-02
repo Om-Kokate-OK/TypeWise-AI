@@ -1,10 +1,12 @@
 export default function ResultPanel({
   time,
-  wpm,
-  netAccuracy,
-  grossAccuracy,
-  backspaces,
-  wrongKeys
+  rawWPM,
+  netWPM,
+  accuracy,
+  correct,
+  incorrect,
+  extra,
+  missed
 }) {
   return (
     <div style={{ marginTop: "24px" }}>
@@ -18,17 +20,19 @@ export default function ResultPanel({
         }}
       >
         <Stat label="Time (s)" value={time} />
-        <Stat label="WPM" value={wpm} />
-        <Stat label="Net Accuracy" value={`${netAccuracy}%`} />
-        <Stat label="Gross Accuracy" value={`${grossAccuracy}%`} />
-        <Stat label="Wrong Keys" value={wrongKeys} />
-        <Stat label="Backspaces" value={backspaces} />
+        <Stat label="Raw WPM" value={rawWPM} />
+        <Stat label="Net WPM" value={netWPM} />
+        <Stat label="Accuracy" value={`${accuracy}%`} />
+        <Stat label="Correct" value={correct} color="#16a34a" />
+        <Stat label="Incorrect" value={incorrect} color="#dc2626" />
+        <Stat label="Extra" value={extra} color="#d97706" />
+        <Stat label="Missed" value={missed} color="#6366f1" />
       </div>
     </div>
   );
 }
 
-function Stat({ label, value }) {
+function Stat({ label, value, color }) {
   return (
     <div
       style={{
@@ -40,7 +44,9 @@ function Stat({ label, value }) {
       }}
     >
       <div style={{ fontSize: "13px", color: "#64748b" }}>{label}</div>
-      <div style={{ fontSize: "22px", fontWeight: "bold" }}>{value}</div>
+      <div style={{ fontSize: "22px", fontWeight: "bold", color: color || "inherit" }}>
+        {value}
+      </div>
     </div>
   );
 }

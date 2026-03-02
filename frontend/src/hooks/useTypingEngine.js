@@ -14,8 +14,8 @@ export function useTypingEngine(targetText, mode, timeUp) {
   const [keystrokeEvents, setKeystrokeEvents] = useState([]);
 
   const forceComplete = () => {
-  setIsCompleted(true);
-};
+    setIsCompleted(true);
+  };
 
   const handleKeyPress = (value) => {
     if (isCompleted) return;
@@ -99,6 +99,10 @@ export function useTypingEngine(targetText, mode, timeUp) {
     }
   }
 
+  const incorrectChars = compareLength - correctFinalChars;
+  const extraChars = Math.max(0, input.length - targetText.length);
+  const missedChars = Math.max(0, targetText.length - input.length);
+
   const resetEngine = () => {
     setInput("");
     setStarted(false);
@@ -116,6 +120,9 @@ export function useTypingEngine(targetText, mode, timeUp) {
 
     // Phase 1 metrics
     correctFinalChars,
+    incorrectChars,
+    extraChars,
+    missedChars,
     wrongKeystrokes,
     backspaceCount,
     totalKeystrokes,
